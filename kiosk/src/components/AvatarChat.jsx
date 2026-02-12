@@ -36,12 +36,10 @@ export default function AvatarChat({
     setTimeout(() => listRef.current?.scrollTo({ top: 999999, behavior: "smooth" }), 50)
   }, [open, messages])
 
-  // Log the initial assistant greeting once per session
   useEffect(() => {
     if (!open) return
     if (!sessionId) return
     onLogMessage?.("assistant", "Hi 👋 I’m your kiosk assistant. How can I help?")
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, sessionId])
 
   const canSend = useMemo(() => input.trim().length > 0, [input])
@@ -59,7 +57,6 @@ export default function AvatarChat({
       { role: "assistant", content: reply },
     ])
 
-    // ✅ Log both user + assistant messages to DB
     await onLogMessage?.("user", text)
     await onLogMessage?.("assistant", reply)
   }

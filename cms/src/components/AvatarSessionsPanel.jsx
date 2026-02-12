@@ -64,7 +64,6 @@ export default function AvatarSessionsPanel() {
       .subscribe()
 
     return () => supabase.removeChannel(channel)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -81,7 +80,6 @@ export default function AvatarSessionsPanel() {
       .subscribe()
 
     return () => supabase.removeChannel(channel)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId])
 
   const selected = useMemo(
@@ -103,7 +101,6 @@ export default function AvatarSessionsPanel() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3">
-        {/* Left: sessions list */}
         <div className="border-r">
           <div className="max-h-[60vh] overflow-auto">
             {sessions.length === 0 ? (
@@ -140,7 +137,6 @@ export default function AvatarSessionsPanel() {
           </div>
         </div>
 
-        {/* Right: messages */}
         <div className="lg:col-span-2">
           {!selected ? (
             <div className="p-6 text-sm text-gray-600">Select a session to view messages.</div>

@@ -1,4 +1,3 @@
-// kiosk/src/utils/speak.js
 export function speakLoop(text) {
   if (!("speechSynthesis" in window)) return () => {}
 
@@ -7,7 +6,6 @@ export function speakLoop(text) {
   const speakOnce = () => {
     if (cancelled) return
 
-    // Clear any queued speech and resume if paused
     window.speechSynthesis.cancel()
     window.speechSynthesis.resume?.()
 

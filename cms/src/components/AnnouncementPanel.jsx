@@ -71,7 +71,6 @@ export default function AnnouncementPanel() {
         "postgres_changes",
         { event: "*", schema: "public", table: "announcements" },
         (payload) => {
-          // Only refetch for our kiosk (fast + simple)
           const row = payload.new || payload.old
           if (row?.kiosk_id === KIOSK_ID) fetchAnnouncements()
         }
@@ -81,7 +80,6 @@ export default function AnnouncementPanel() {
     return () => {
       if (channel) supabase.removeChannel(channel)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function selectItem(item) {
@@ -108,14 +106,12 @@ export default function AnnouncementPanel() {
     setStatus("Activating...")
 
     try {
-      // 1) deactivate any currently active
       await supabase
         .from("announcements")
         .update({ is_active: false })
         .eq("kiosk_id", KIOSK_ID)
         .eq("is_active", true)
 
-      // 2) insert new active announcement (keeps history clean)
       const { error } = await supabase.from("announcements").insert([
         { kiosk_id: KIOSK_ID, title: title.trim(), body: body.trim(), is_active: true },
       ])
@@ -173,7 +169,6 @@ export default function AnnouncementPanel() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-[240px_1fr]">
-        {/* LEFT: history nav */}
         <div className="border-r bg-slate-50">
           <div className="p-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
             Previous
@@ -224,7 +219,6 @@ export default function AnnouncementPanel() {
           )}
         </div>
 
-        {/* RIGHT: editor */}
         <div className="p-5">
           <div className="flex items-center justify-between">
             <div className="text-sm text-slate-600">

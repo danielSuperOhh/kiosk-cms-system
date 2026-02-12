@@ -1,6 +1,5 @@
 import { supabase } from "./supabaseClient"
 
-// Uploads a file to the "media" bucket and returns the public URL + storage path
 export async function uploadMediaFile(file) {
   const fileExt = file.name.split(".").pop()
   const safeName = file.name.replace(/\s+/g, "_")

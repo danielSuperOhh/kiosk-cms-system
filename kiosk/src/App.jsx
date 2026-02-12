@@ -64,12 +64,10 @@ export default function App() {
 
     if (spokenTextRef.current !== nextText) {
       spokenTextRef.current = nextText
-      // (TTS may warn on some browsers, but you asked to remove the enable-audio gate)
       startTtsLoop(nextText)
     }
   }
 
-  // ✅ Avatar session start
   async function startAvatarSession() {
     const ua = navigator.userAgent || ""
     const { data, error } = await supabase
@@ -82,7 +80,6 @@ export default function App() {
     return data.id
   }
 
-  // ✅ Avatar session end
   async function endAvatarSession(sessionId) {
     if (!sessionId) return
     await supabase
@@ -91,7 +88,6 @@ export default function App() {
       .eq("id", sessionId)
   }
 
-  // ✅ Log a message (user/assistant)
   async function logAvatarMessage(role, content) {
     if (!avatarSessionId) return
     await supabase.from("avatar_messages").insert([
@@ -106,7 +102,6 @@ export default function App() {
       setAvatarOpen(true)
     } catch (e) {
       console.error(e)
-      // still open UI even if logging fails
       setAvatarSessionId(null)
       setAvatarOpen(true)
     }
@@ -128,7 +123,6 @@ export default function App() {
 
     async function init() {
       try {
-        // 1) Load settings
         try {
           const settings = await getKioskSettings(KIOSK_ID)
           const ms = Number(settings?.image_duration_ms)
@@ -138,18 +132,15 @@ export default function App() {
           setImageDurationMs(DEFAULT_IMAGE_DURATION_MS)
         }
 
-        // 2) Load media
         const media = await getMediaForKiosk(KIOSK_ID)
         setMediaItems(media)
         setCurrentIndex(0)
 
-        // 3) Load current announcement
         const active = await getActiveAnnouncement(KIOSK_ID)
         await applyAnnouncement(active)
 
         setStatus("Connected ✅")
 
-        // Realtime: announcements (filtered)
         announceChannel = supabase
           .channel(`announcements-changes-${KIOSK_ID}`)
           .on(
@@ -167,7 +158,6 @@ export default function App() {
           )
           .subscribe()
 
-        // Realtime: media (filtered)
         mediaChannel = supabase
           .channel(`media-items-changes-${KIOSK_ID}`)
           .on(
@@ -186,7 +176,6 @@ export default function App() {
           )
           .subscribe()
 
-        // Realtime: settings (filtered)
         settingsChannel = supabase
           .channel(`kiosk-settings-changes-${KIOSK_ID}`)
           .on(
@@ -221,10 +210,8 @@ export default function App() {
       if (settingsChannel) supabase.removeChannel(settingsChannel)
       stopTts()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Use DB-controlled duration safely
   useEffect(() => {
     if (mediaItems.length === 0) return
 
@@ -243,7 +230,6 @@ export default function App() {
 
   return (
     <div className="relative min-h-screen bg-black text-white overflow-hidden">
-      {/* Avatar chat */}
       <AvatarChat
         open={avatarOpen}
         onClose={closeAssistant}
@@ -251,7 +237,6 @@ export default function App() {
         onLogMessage={logAvatarMessage}
       />
 
-      {/* Floating avatar button */}
       <button
         onClick={openAssistant}
         className="fixed bottom-6 right-6 z-30 flex items-center gap-2 rounded-full bg-white/10 px-4 py-3 text-sm text-white/90 backdrop-blur ring-1 ring-white/20 shadow-xl hover:bg-white/15"
@@ -261,7 +246,6 @@ export default function App() {
         Assistant
       </button>
 
-      {/* Background media */}
       <div className="absolute inset-0">
         {!hasMedia ? (
           <div className="h-full w-full grid place-items-center text-white/70">
@@ -284,7 +268,6 @@ export default function App() {
         <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/20 to-black/65" />
       </div>
 
-      {/* Top status bar */}
       <div className="relative z-10 flex items-center justify-between p-5">
         <div className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/80 backdrop-blur">
           {status}
@@ -300,7 +283,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* Foreground content */}
       <div className="relative z-10 min-h-[calc(100vh-64px)] flex items-center justify-center px-6 pb-10">
         {!announcement ? (
           <div className="max-w-xl text-center">

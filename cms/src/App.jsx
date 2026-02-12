@@ -12,7 +12,6 @@ export default function App() {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  // ⏱️ session timeout (minutes → ms)
   const timeoutMs = useMemo(() => {
     const mins = Number(import.meta.env.VITE_CMS_SESSION_TIMEOUT_MINUTES || 15)
     return Math.max(1, mins) * 60 * 1000
@@ -34,7 +33,6 @@ export default function App() {
     try {
       await signOut()
     } catch {
-      // ignore
     }
 
     setSession(null)
@@ -50,7 +48,6 @@ export default function App() {
     }, timeoutMs)
   }
 
-  // 🔐 Auth + initial timer
   useEffect(() => {
     let sub
 
@@ -88,10 +85,8 @@ export default function App() {
       clearLogoutTimer()
       sub?.data?.subscription?.unsubscribe?.()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeoutMs])
 
-  // 🖱️ reset timer on user activity
   useEffect(() => {
     if (!session) return
 
@@ -114,24 +109,20 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Login route */}
         <Route
           path="/login"
           element={session ? <Navigate to="/dashboard" replace /> : <Login />}
         />
 
-        {/* Protected routes */}
         <Route element={<ProtectedRoute session={session} />}>
           <Route path="/dashboard" element={<Dashboard session={session} />} />
         </Route>
 
-        {/* Default */}
         <Route
           path="/"
           element={<Navigate to={session ? "/dashboard" : "/login"} replace />}
         />
 
-        {/* Catch-all */}
         <Route
           path="*"
           element={<Navigate to={session ? "/dashboard" : "/login"} replace />}

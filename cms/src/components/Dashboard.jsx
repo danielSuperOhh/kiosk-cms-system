@@ -11,7 +11,6 @@ export default function Dashboard({ session }) {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* ✅ Sticky top header */}
       <div className="sticky top-0 z-50 bg-gray-50/90 backdrop-blur border-b border-gray-200">
         <div className="max-w-6xl mx-auto p-6">
           <div className="bg-white rounded-2xl shadow p-6 flex items-center justify-between">
@@ -32,7 +31,6 @@ export default function Dashboard({ session }) {
         </div>
       </div>
 
-      {/* Page content */}
       <div className="max-w-6xl mx-auto p-6">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <MediaUploadPanel />

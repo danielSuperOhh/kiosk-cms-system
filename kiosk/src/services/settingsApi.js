@@ -1,4 +1,3 @@
-// kiosk/src/services/settingsApi.js
 import { supabase } from "./supabaseClient"
 
 export async function getKioskSettings(kioskId) {

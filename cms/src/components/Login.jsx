@@ -46,7 +46,6 @@ export default function Login() {
         </p>
 
         <form onSubmit={handleLogin} className="space-y-5">
-          {/* Email */}
           <div>
             <label className="text-sm text-zinc-700">Email</label>
             <input
@@ -60,7 +59,6 @@ export default function Login() {
             />
           </div>
 
-          {/* Password */}
           <div>
             <label className="text-sm text-zinc-700">Password</label>
             <div className="mt-2 flex items-center rounded-xl bg-zinc-100 px-2 focus-within:ring-2 focus-within:ring-zinc-300">
@@ -88,7 +86,6 @@ export default function Login() {
             </div>
           </div>
 
-          {/* Status */}
           {status && (
             <div
               className={`rounded-xl px-4 py-3 text-sm ${
@@ -101,7 +98,6 @@ export default function Login() {
             </div>
           )}
 
-          {/* Submit */}
           <button
             type="submit"
             disabled={isLoading}
