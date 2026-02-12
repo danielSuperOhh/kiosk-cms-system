@@ -19,28 +19,39 @@ function generateReply(text) {
   return "Got it. Try asking about announcements, media, or how this kiosk works."
 }
 
-export default function AvatarChat({
-  open,
-  onClose,
-  sessionId,
-  onLogMessage,
-}) {
-  const [messages, setMessages] = useState([
-    { role: "assistant", content: "Hi 👋 I’m your kiosk assistant. How can I help?" },
-  ])
+const INITIAL = [
+  { role: "assistant", content: "Hi 👋 I’m your kiosk assistant. How can I help?" },
+]
+
+export default function AvatarChat({ open, onClose, sessionId, onLogMessage }) {
+  const [messages, setMessages] = useState(INITIAL)
   const [input, setInput] = useState("")
   const listRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    setMessages(INITIAL)
+    setInput("")
+  }, [open])
 
   useEffect(() => {
     if (!open) return
     setTimeout(() => listRef.current?.scrollTo({ top: 999999, behavior: "smooth" }), 50)
   }, [open, messages])
 
+  const greetedRef = useRef(false)
   useEffect(() => {
     if (!open) return
     if (!sessionId) return
+    if (greetedRef.current) return
+
+    greetedRef.current = true
     onLogMessage?.("assistant", "Hi 👋 I’m your kiosk assistant. How can I help?")
   }, [open, sessionId])
+
+  useEffect(() => {
+    if (!open) greetedRef.current = false
+  }, [open])
 
   const canSend = useMemo(() => input.trim().length > 0, [input])
 

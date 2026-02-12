@@ -1,291 +1,163 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { supabase } from "../services/supabaseClient"
-import {
-  MegaphoneIcon,
-  CheckCircleIcon,
-  ClockIcon,
-} from "@heroicons/react/24/outline"
+import { TrashIcon } from "@heroicons/react/24/outline"
 
 const KIOSK_ID = "e1eb7ca7-eac4-496a-a251-697bd156c1cd"
 
-function timeAgo(iso) {
-  if (!iso) return ""
-  const t = new Date(iso).getTime()
-  const diff = Date.now() - t
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return "just now"
-  if (mins < 60) return `${mins}m ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h ago`
-  const days = Math.floor(hrs / 24)
-  return `${days}d ago`
-}
-
 export default function AnnouncementPanel() {
-  const [items, setItems] = useState([])
-  const [selectedId, setSelectedId] = useState(null)
-
   const [title, setTitle] = useState("")
   const [body, setBody] = useState("")
   const [status, setStatus] = useState("")
-  const [loadingList, setLoadingList] = useState(true)
-  const [saving, setSaving] = useState(false)
 
-  const selected = useMemo(
-    () => items.find((x) => x.id === selectedId) || null,
-    [items, selectedId]
-  )
+  const [loading, setLoading] = useState(true)
+  const [list, setList] = useState([])
 
-  async function fetchAnnouncements() {
-    setLoadingList(true)
+  async function loadAnnouncements() {
+    setLoading(true)
     const { data, error } = await supabase
       .from("announcements")
-      .select("id,title,body,is_active,created_at")
+      .select("id, kiosk_id, title, body, is_active, created_at")
       .eq("kiosk_id", KIOSK_ID)
       .order("created_at", { ascending: false })
-      .limit(50)
 
-    if (!error) {
-      setItems(data || [])
-      // auto-select newest if nothing selected
-      if (!selectedId && (data?.length ?? 0) > 0) {
-        setSelectedId(data[0].id)
-        setTitle(data[0].title || "")
-        setBody(data[0].body || "")
-      }
-    } else {
+    if (error) {
       setStatus(`Error: ${error.message}`)
+      setList([])
+    } else {
+      setList(data || [])
     }
-    setLoadingList(false)
+    setLoading(false)
   }
 
   useEffect(() => {
-    let channel
-
-    fetchAnnouncements()
-
-    // realtime updates to list
-    channel = supabase
-      .channel("cms-announcements-list")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "announcements" },
-        (payload) => {
-          const row = payload.new || payload.old
-          if (row?.kiosk_id === KIOSK_ID) fetchAnnouncements()
-        }
-      )
-      .subscribe()
-
-    return () => {
-      if (channel) supabase.removeChannel(channel)
-    }
+    loadAnnouncements()
   }, [])
 
-  function selectItem(item) {
-    setSelectedId(item.id)
-    setTitle(item.title || "")
-    setBody(item.body || "")
-    setStatus("")
-  }
-
-  function newAnnouncement() {
-    setSelectedId(null)
-    setTitle("")
-    setBody("")
-    setStatus("")
-  }
-
   async function activate() {
-    if (!title.trim() || !body.trim()) {
-      setStatus("Error: Title and text are required.")
-      return
-    }
-
-    setSaving(true)
     setStatus("Activating...")
 
-    try {
-      await supabase
-        .from("announcements")
-        .update({ is_active: false })
-        .eq("kiosk_id", KIOSK_ID)
-        .eq("is_active", true)
+    await supabase
+      .from("announcements")
+      .update({ is_active: false })
+      .eq("kiosk_id", KIOSK_ID)
+      .eq("is_active", true)
 
-      const { error } = await supabase.from("announcements").insert([
-        { kiosk_id: KIOSK_ID, title: title.trim(), body: body.trim(), is_active: true },
-      ])
+    const { error } = await supabase.from("announcements").insert([
+      { kiosk_id: KIOSK_ID, title, body, is_active: true },
+    ])
 
-      if (error) throw error
-      setStatus("Announcement active ✅")
-      await fetchAnnouncements()
-    } catch (e) {
-      setStatus(`Error: ${e.message}`)
-    } finally {
-      setSaving(false)
-    }
+    setStatus(error ? `Error: ${error.message}` : "Announcement active ✅")
+    await loadAnnouncements()
   }
 
   async function deactivate() {
-    setSaving(true)
     setStatus("Deactivating...")
 
-    try {
-      const { error } = await supabase
-        .from("announcements")
-        .update({ is_active: false })
-        .eq("kiosk_id", KIOSK_ID)
-        .eq("is_active", true)
+    const { error } = await supabase
+      .from("announcements")
+      .update({ is_active: false })
+      .eq("kiosk_id", KIOSK_ID)
+      .eq("is_active", true)
 
-      if (error) throw error
-      setStatus("Announcement off ✅")
-      await fetchAnnouncements()
-    } catch (e) {
-      setStatus(`Error: ${e.message}`)
-    } finally {
-      setSaving(false)
-    }
+    setStatus(error ? `Error: ${error.message}` : "Announcement off ✅")
+    await loadAnnouncements()
+  }
+
+  async function deleteAnnouncement(row) {
+    if (!confirm(`Delete announcement "${row.title}"?`)) return
+    setStatus("Deleting...")
+
+    const { error } = await supabase.from("announcements").delete().eq("id", row.id)
+    setStatus(error ? `Error: ${error.message}` : "Deleted ✅")
+    await loadAnnouncements()
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow overflow-hidden">
-      <div className="p-5 border-b">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <MegaphoneIcon className="h-5 w-5 text-slate-700" />
-            <h2 className="text-lg font-semibold">Announcements</h2>
-          </div>
+    <div className="space-y-6">
+      <div className="rounded-2xl bg-white shadow-sm ring-1 ring-black/5 p-6">
+        <h2 className="text-lg font-semibold text-gray-900">Live Announcement</h2>
 
-          <button
-            onClick={newAnnouncement}
-            className="text-sm px-3 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800"
-          >
-            New
-          </button>
-        </div>
-        <p className="mt-1 text-sm text-slate-600">
-          Activate to push live to the kiosk. Previous items stay saved.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-[240px_1fr]">
-        <div className="border-r bg-slate-50">
-          <div className="p-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Previous
-          </div>
-
-          {loadingList ? (
-            <div className="px-3 pb-4 text-sm text-slate-600">Loading…</div>
-          ) : items.length === 0 ? (
-            <div className="px-3 pb-4 text-sm text-slate-600">
-              No announcements yet.
-            </div>
-          ) : (
-            <div className="max-h-[420px] overflow-auto pb-3">
-              {items.map((item) => {
-                const active = item.is_active
-                const isSelected = item.id === selectedId
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => selectItem(item)}
-                    className={[
-                      "w-full text-left px-3 py-3 transition",
-                      isSelected ? "bg-white" : "hover:bg-white/70",
-                    ].join(" ")}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-medium text-slate-900">
-                          {item.title || "(Untitled)"}
-                        </div>
-                        <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
-                          <ClockIcon className="h-4 w-4" />
-                          <span>{timeAgo(item.created_at)}</span>
-                        </div>
-                      </div>
-
-                      {active ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
-                          <CheckCircleIcon className="h-4 w-4" />
-                          Active
-                        </span>
-                      ) : null}
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
-        <div className="p-5">
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-slate-600">
-              {selected ? (
-                <>
-                  Editing: <span className="font-medium text-slate-900">{selected.title || "(Untitled)"}</span>
-                </>
-              ) : (
-                <>Creating a new announcement</>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-4">
-            <label className="block text-sm font-medium text-slate-700">Title</label>
+        <div className="mt-5 space-y-4">
+          <div>
+            <div className="text-sm font-medium text-gray-800">Title</div>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 p-2 outline-none focus:ring-2 focus:ring-slate-200"
-              placeholder="e.g., Store closed at 6pm"
+              className="mt-2 w-full rounded-xl bg-gray-50 px-4 py-3 text-sm text-gray-900 ring-1 ring-gray-200 outline-none focus:ring-2 focus:ring-gray-300"
             />
           </div>
 
-          <div className="mt-4">
-            <label className="block text-sm font-medium text-slate-700">Text</label>
+          <div>
+            <div className="text-sm font-medium text-gray-800">Text</div>
             <textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 p-2 h-28 outline-none focus:ring-2 focus:ring-slate-200"
-              placeholder="Write the announcement…"
+              className="mt-2 w-full rounded-xl bg-gray-50 px-4 py-3 text-sm text-gray-900 ring-1 ring-gray-200 outline-none focus:ring-2 focus:ring-gray-300 h-28"
             />
           </div>
 
-          {status ? (
-            <div
-              className={`mt-4 rounded-lg px-3 py-2 text-sm ${
-                status.startsWith("Error:")
-                  ? "bg-rose-50 text-rose-700"
-                  : "bg-slate-50 text-slate-700"
-              }`}
-            >
-              {status}
-            </div>
-          ) : null}
-
-          <div className="mt-5 flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <button
               onClick={activate}
-              disabled={saving}
-              className="px-4 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60"
+              className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"
             >
-              {saving ? "Working..." : "Activate"}
+              Activate
             </button>
 
             <button
               onClick={deactivate}
-              disabled={saving}
-              className="px-4 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-60"
+              className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50"
             >
               Deactivate
             </button>
-          </div>
 
-          <div className="mt-4 text-xs text-slate-500">
-            Tip: Activating always creates a new record (history stays intact).
+            {status ? <div className="text-sm text-gray-700 self-center">{status}</div> : null}
           </div>
         </div>
+      </div>
+
+      <div className="rounded-2xl bg-white shadow-sm ring-1 ring-black/5 p-6">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">Previous announcements</h3>
+          <button
+            onClick={loadAnnouncements}
+            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
+          >
+            Refresh
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="mt-4 text-sm text-gray-600">Loading…</div>
+        ) : list.length === 0 ? (
+          <div className="mt-4 text-sm text-gray-600">No announcements yet.</div>
+        ) : (
+          <div className="mt-4 divide-y divide-gray-100">
+            {list.map((a) => (
+              <div key={a.id} className="py-4 flex items-start gap-4">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <div className="font-medium text-gray-900 truncate">{a.title}</div>
+                    {a.is_active ? (
+                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">
+                        ACTIVE
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-1 text-sm text-gray-600 line-clamp-2">{a.body}</div>
+                </div>
+
+                <button
+                  onClick={() => deleteAnnouncement(a)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-50"
+                >
+                  <TrashIcon className="h-5 w-5 text-rose-600" />
+                  Delete
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

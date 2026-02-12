@@ -6,8 +6,38 @@ import { getKioskSettings } from "./services/settingsApi"
 import AvatarChat from "./components/AvatarChat"
 import { UserCircleIcon } from "@heroicons/react/24/solid"
 
+import {
+  ClockIcon,
+  MapPinIcon,
+  ArrowPathIcon,
+  SunIcon,
+  CloudIcon,
+  BoltIcon,
+} from "@heroicons/react/24/outline"
+
 const KIOSK_ID = "e1eb7ca7-eac4-496a-a251-697bd156c1cd"
 const DEFAULT_IMAGE_DURATION_MS = 8000
+
+function pad2(n) {
+  return String(n).padStart(2, "0")
+}
+
+function formatHMS(d) {
+  const h = pad2(d.getHours())
+  const m = pad2(d.getMinutes())
+  const s = pad2(d.getSeconds())
+  return `${h}:${m}:${s}`
+}
+
+function weatherMeta(code) {
+  if (code === 0) return { label: "Clear", Icon: SunIcon }
+  if ([1, 2, 3].includes(code)) return { label: "Cloudy", Icon: CloudIcon }
+  if ([45, 48].includes(code)) return { label: "Fog", Icon: CloudIcon }
+  if ([51, 53, 55, 56, 57].includes(code)) return { label: "Drizzle", Icon: CloudIcon }
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return { label: "Rain", Icon: CloudIcon }
+  if ([95, 96, 99].includes(code)) return { label: "Storm", Icon: BoltIcon }
+  return { label: "Weather", Icon: CloudIcon }
+}
 
 function startTtsLoop(text) {
   if (!("speechSynthesis" in window)) return
@@ -39,9 +69,17 @@ export default function App() {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [imageDurationMs, setImageDurationMs] = useState(DEFAULT_IMAGE_DURATION_MS)
 
-  // ✅ Avatar
   const [avatarOpen, setAvatarOpen] = useState(false)
   const [avatarSessionId, setAvatarSessionId] = useState(null)
+
+  const [now, setNow] = useState(new Date())
+  const [weather, setWeather] = useState({
+    loading: true,
+    error: "",
+    tempC: null,
+    code: null,
+    city: "Local",
+  })
 
   const spokenTextRef = useRef("")
 
@@ -109,10 +147,14 @@ export default function App() {
 
   async function closeAssistant() {
     setAvatarOpen(false)
+
+    const id = avatarSessionId 
+    setAvatarSessionId(null)
+
     try {
-      await endAvatarSession(avatarSessionId)
-    } finally {
-      setAvatarSessionId(null)
+      await endAvatarSession(id)
+    } catch (e) {
+      console.warn("Failed to end session:", e.message)
     }
   }
 
@@ -145,12 +187,7 @@ export default function App() {
           .channel(`announcements-changes-${KIOSK_ID}`)
           .on(
             "postgres_changes",
-            {
-              event: "*",
-              schema: "public",
-              table: "announcements",
-              filter: `kiosk_id=eq.${KIOSK_ID}`,
-            },
+            { event: "*", schema: "public", table: "announcements", filter: `kiosk_id=eq.${KIOSK_ID}` },
             async () => {
               const activeNow = await getActiveAnnouncement(KIOSK_ID)
               await applyAnnouncement(activeNow)
@@ -162,12 +199,7 @@ export default function App() {
           .channel(`media-items-changes-${KIOSK_ID}`)
           .on(
             "postgres_changes",
-            {
-              event: "*",
-              schema: "public",
-              table: "media_items",
-              filter: `kiosk_id=eq.${KIOSK_ID}`,
-            },
+            { event: "*", schema: "public", table: "media_items", filter: `kiosk_id=eq.${KIOSK_ID}` },
             async () => {
               const updatedMedia = await getMediaForKiosk(KIOSK_ID)
               setMediaItems(updatedMedia)
@@ -180,12 +212,7 @@ export default function App() {
           .channel(`kiosk-settings-changes-${KIOSK_ID}`)
           .on(
             "postgres_changes",
-            {
-              event: "*",
-              schema: "public",
-              table: "kiosk_settings",
-              filter: `kiosk_id=eq.${KIOSK_ID}`,
-            },
+            { event: "*", schema: "public", table: "kiosk_settings", filter: `kiosk_id=eq.${KIOSK_ID}` },
             async () => {
               try {
                 const settings = await getKioskSettings(KIOSK_ID)
@@ -214,7 +241,6 @@ export default function App() {
 
   useEffect(() => {
     if (mediaItems.length === 0) return
-
     const current = mediaItems[currentIndex]
     if (!current || current.type !== "image") return
 
@@ -222,6 +248,69 @@ export default function App() {
     const timer = setTimeout(() => nextMedia(), ms)
     return () => clearTimeout(timer)
   }, [currentIndex, mediaItems, imageDurationMs])
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(t)
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function fetchWeather(lat, lon) {
+      try {
+        const url =
+          `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat)}` +
+          `&longitude=${encodeURIComponent(lon)}` +
+          `&current_weather=true&timezone=auto`
+
+        const res = await fetch(url)
+        const json = await res.json()
+
+        const cw = json?.current_weather
+        const tempC = cw?.temperature
+        const code = cw?.weathercode
+
+        if (cancelled) return
+        setWeather((w) => ({
+          ...w,
+          loading: false,
+          error: "",
+          tempC,
+          code,
+        }))
+      } catch (e) {
+        if (cancelled) return
+        setWeather((w) => ({
+          ...w,
+          loading: false,
+          error: "Weather unavailable",
+        }))
+      }
+    }
+
+    if (!("geolocation" in navigator)) {
+      setWeather((w) => ({ ...w, loading: false, error: "No location" }))
+      return
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        if (cancelled) return
+        const { latitude, longitude } = pos.coords
+        fetchWeather(latitude, longitude)
+      },
+      () => {
+        if (cancelled) return
+        setWeather((w) => ({ ...w, loading: false, error: "Location blocked" }))
+      },
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 10 * 60 * 1000 }
+    )
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const current = mediaItems[currentIndex]
   const hasMedia = Boolean(current)
@@ -268,17 +357,51 @@ export default function App() {
         <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/20 to-black/65" />
       </div>
 
-      <div className="relative z-10 flex items-center justify-between p-5">
-        <div className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/80 backdrop-blur">
-          {status}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/80 backdrop-blur">
-            Media {indexLabel}
+      <div className="relative z-10 p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/80 backdrop-blur w-fit">
+            {status}
           </div>
-          <div className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/80 backdrop-blur">
-            Img {(imageDurationMs / 1000).toFixed(1)}s
+
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <div className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/80 backdrop-blur inline-flex items-center gap-2">
+              <ClockIcon className="h-4 w-4" />
+              {formatHMS(now)}
+            </div>
+
+            <div className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/80 backdrop-blur inline-flex items-center gap-2">
+              {weather.loading ? (
+                <>
+                  <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                  Weather…
+                </>
+              ) : weather.error ? (
+                <>
+                  <MapPinIcon className="h-4 w-4" />
+                  {weather.error}
+                </>
+              ) : (
+                (() => {
+                  const { label, Icon } = weatherMeta(Number(weather.code))
+                  return (
+                    <>
+                      <Icon className="h-4 w-4" />
+                      <span>{Math.round(Number(weather.tempC))}°C</span>
+                      <span className="text-white/60">•</span>
+                      <span>{label}</span>
+                    </>
+                  )
+                })()
+              )}
+            </div>
+
+            <div className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/80 backdrop-blur">
+              Media {indexLabel}
+            </div>
+
+            <div className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/80 backdrop-blur">
+              Img {(imageDurationMs / 1000).toFixed(1)}s
+            </div>
           </div>
         </div>
       </div>
@@ -299,18 +422,22 @@ export default function App() {
         ) : (
           <div className="w-full max-w-4xl">
             <div className="rounded-3xl bg-white/10 p-8 backdrop-blur ring-1 ring-white/15 shadow-2xl">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs text-white/80">
-                    <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                    Live announcement
+              <div className="flex items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs text-white/80 whitespace-nowrap">
+                      <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                      Live announcement
+                    </div>
+
+                    <div className="ml-auto inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs text-white/80 whitespace-nowrap">
+                      TTS: ON
+                    </div>
                   </div>
 
-                  <h1 className="mt-4 text-4xl font-semibold tracking-tight">{announcement.title}</h1>
-                </div>
-
-                <div className="shrink-0 rounded-2xl bg-black/30 px-4 py-3 text-xs text-white/80 ring-1 ring-white/10">
-                  TTS: ON
+                  <h1 className="mt-4 text-4xl font-semibold tracking-tight break-words">
+                    {announcement.title}
+                  </h1>
                 </div>
               </div>
 
